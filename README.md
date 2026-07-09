@@ -1,7 +1,3 @@
-Here is a complete, polished `README.md` template for your repository. It captures the dark, secretive vibe of the game, lists the tech stack, provides local setup instructions, and includes your specific contribution rules.
-
----
-
 # 🕵️‍♂️ Deduction Matrix
 
 > **Trust No One.** An interactive, real-time social deduction and secret chat game.
