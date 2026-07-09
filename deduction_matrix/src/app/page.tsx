@@ -196,6 +196,17 @@ export default function Home() {
           </div>
         )}
       </div>
+      {/* --- CUTE CUSTOM FOOTER --- */}
+      <div className="absolute bottom-8 flex flex-col items-center gap-1">
+        <a
+          href="https://github.com/debaditya99/DeductionMatrix"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[#DEBAD7] text-sm font-medium hover:opacity-80 transition-opacity flex items-center gap-1.5"
+        >
+          Created by Deb ✨
+        </a>
+      </div>
     </main>
   );
 }
