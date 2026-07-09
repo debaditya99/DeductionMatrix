@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Crown, User, Check, Users, Loader2 } from "lucide-react";
+import confetti from "canvas-confetti";
+import { PartyPopper, Ghost } from "lucide-react";
 
 type Player = {
   id: string;
@@ -325,54 +327,52 @@ export default function RoomLobby() {
   );
 }
 
-function BreakoutRoom({
-  roomCode,
-  groupId,
+function BreakoutRoom({ 
+  roomCode, 
+  groupId, 
   localPlayerId,
   groupPlayers,
   allPlayers,
   chatEndsAt,
   isHost,
-  roomRound,
-}: {
-  roomCode: string;
-  groupId: string;
-  localPlayerId: string;
+  roomRound
+}: { 
+  roomCode: string; 
+  groupId: string; 
+  localPlayerId: string; 
   groupPlayers: any[];
   allPlayers: any[];
   chatEndsAt: string;
-  isHost: boolean;
-  roomRound: number;
+  isHost: boolean;   
+  roomRound: number; 
 }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [timeLeft, setTimeLeft] = useState(30);
-  const [phase, setPhase] = useState<"CHATTING" | "GUESSING" | "WAITING">(
-    "CHATTING",
-  );
+  
+  // --- ADDED REVEAL PHASE & POINTS STATE ---
+  const [phase, setPhase] = useState<"CHATTING" | "GUESSING" | "REVEAL" | "WAITING">("CHATTING");
+  const [pointsEarned, setPointsEarned] = useState<number>(0);
+  
   const [selectedGuesses, setSelectedGuesses] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Instantly reset the screen to the Chat when a new round starts
   useEffect(() => {
     setPhase("CHATTING");
     setSelectedGuesses([]);
+    setPointsEarned(0);
   }, [roomRound]);
 
-  const otherPlayers = groupPlayers.filter((p) => p.id !== localPlayerId);
+  const otherPlayers = groupPlayers.filter(p => p.id !== localPlayerId);
   const requiredGuesses = otherPlayers.length;
-
+  
   const strangerMap = Object.fromEntries(
     otherPlayers.map((p, index) => [
       p.id,
-      {
-        name: `Stranger ${index + 1}`,
-        color: index === 0 ? "text-blue-400" : "text-emerald-400",
-      },
-    ]),
+      { name: `Stranger ${index + 1}`, color: index === 0 ? "text-blue-400" : "text-emerald-400" }
+    ])
   );
 
-  // Timer Countdown
   useEffect(() => {
     if (phase !== "CHATTING" || !chatEndsAt) return;
     const endTarget = new Date(chatEndsAt).getTime();
@@ -387,140 +387,102 @@ function BreakoutRoom({
     return () => clearInterval(interval);
   }, [chatEndsAt, phase]);
 
-  // Chat Fetch & Listen
   useEffect(() => {
     if (phase !== "CHATTING") return;
     const fetchMessages = async () => {
-      const { data } = await supabase
-        .from("messages")
-        .select("*")
-        .eq("group_id", groupId)
-        .order("created_at", { ascending: true });
+      const { data } = await supabase.from("messages").select("*").eq("group_id", groupId).order("created_at", { ascending: true });
       if (data) setMessages(data);
     };
     fetchMessages();
 
-    const channel = supabase
-      .channel(`chat:${groupId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `group_id=eq.${groupId}`,
-        },
-        (payload) => setMessages((prev) => [...prev, payload.new]),
-      )
-      .subscribe();
+    const channel = supabase.channel(`chat:${groupId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `group_id=eq.${groupId}` }, 
+        (payload) => setMessages((prev) => [...prev, payload.new])
+      ).subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [groupId, phase]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || phase !== "CHATTING") return;
     const content = newMessage.trim();
-    setNewMessage("");
-    await supabase
-      .from("messages")
-      .insert([
-        {
-          room_code: roomCode,
-          group_id: groupId,
-          sender_id: localPlayerId,
-          content,
-        },
-      ]);
+    setNewMessage(""); 
+    await supabase.from("messages").insert([{ room_code: roomCode, group_id: groupId, sender_id: localPlayerId, content }]);
   };
 
   const toggleGuess = (playerId: string) => {
     if (selectedGuesses.includes(playerId)) {
-      setSelectedGuesses((prev) => prev.filter((id) => id !== playerId));
+      setSelectedGuesses(prev => prev.filter(id => id !== playerId));
     } else if (selectedGuesses.length < requiredGuesses) {
-      setSelectedGuesses((prev) => [...prev, playerId]);
+      setSelectedGuesses(prev => [...prev, playerId]);
     }
   };
 
+  // --- UPDATED SUBMIT GUESS LOGIC ---
   const submitGuess = async () => {
-    const correctIds = otherPlayers.map((p) => p.id);
-    const correctCount = selectedGuesses.filter((id) =>
-      correctIds.includes(id),
-    ).length;
+    const correctIds = otherPlayers.map(p => p.id);
+    const correctCount = selectedGuesses.filter(id => correctIds.includes(id)).length;
+
+    setPointsEarned(correctCount);
 
     if (correctCount > 0) {
-      const { data } = await supabase
-        .from("players")
-        .select("score")
-        .eq("id", localPlayerId)
-        .single();
+      const { data } = await supabase.from("players").select("score").eq("id", localPlayerId).single();
       const newScore = (data?.score || 0) + correctCount;
-      await supabase
-        .from("players")
-        .update({ score: newScore })
-        .eq("id", localPlayerId);
+      await supabase.from("players").update({ score: newScore }).eq("id", localPlayerId);
+      
+      // Fire confetti if they got at least one right!
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#10b981', '#3b82f6', '#ffffff'] // Emerald, Blue, White to match the matrix theme
+      });
     }
-    setPhase("WAITING");
+    
+    // Move to REVEAL screen instead of WAITING
+    setPhase("REVEAL");
   };
 
-  // Host Action: Start Next Round
+  // --- HOST CONTROLS ---
   const handleNextRound = async () => {
     setIsProcessing(true);
-
     const playersList = [...allPlayers];
-    if (playersList.length % 2 !== 0) {
-      playersList.push({ id: "BYE" }); // Handle odd numbers
-    }
-
+    if (playersList.length % 2 !== 0) playersList.push({ id: "BYE" });
     const n = playersList.length;
-    const shift = roomRound % (n - 1);
-
-    const shiftedPlayers = [
-      playersList[0],
-      ...playersList.slice(1 + shift),
-      ...playersList.slice(1, 1 + shift),
-    ];
+    const shift = roomRound % (n - 1); 
+    const shiftedPlayers = [playersList[0], ...playersList.slice(1 + shift), ...playersList.slice(1, 1 + shift)];
 
     const newPairs: any[] = [];
     for (let i = 0; i < n / 2; i++) {
       const p1 = shiftedPlayers[i];
       const p2 = shiftedPlayers[n - 1 - i];
-
       if (p1.id !== "BYE" && p2.id !== "BYE") {
         newPairs.push({ groupId: crypto.randomUUID(), players: [p1, p2] });
       } else {
         const oddPlayer = p1.id === "BYE" ? p2 : p1;
-        if (newPairs.length > 0) {
-          newPairs[newPairs.length - 1].players.push(oddPlayer);
-        } else {
-          newPairs.push({ groupId: crypto.randomUUID(), players: [oddPlayer] });
-        }
+        if (newPairs.length > 0) newPairs[newPairs.length - 1].players.push(oddPlayer);
+        else newPairs.push({ groupId: crypto.randomUUID(), players: [oddPlayer] });
       }
     }
 
-    await supabase
-      .from("rooms")
-      .update({
-        round: roomRound + 1,
-        pairs: newPairs,
-        chat_ends_at: new Date(Date.now() + 30000).toISOString(),
-      })
-      .eq("code", roomCode);
-
+    await supabase.from("rooms").update({ 
+      round: roomRound + 1,
+      pairs: newPairs,
+      chat_ends_at: new Date(Date.now() + 30000).toISOString()
+    }).eq("code", roomCode);
     setIsProcessing(false);
   };
 
-  // Host Action: End Game
   const handleEndRoom = async () => {
     setIsProcessing(true);
     await supabase.from("rooms").delete().eq("code", roomCode);
-    window.location.href = "/";
+    window.location.href = "/"; 
   };
 
+
+  // --- 1. RENDER WAITING (Leaderboard) ---
   if (phase === "WAITING") {
-    // Sort players by score, highest to lowest
     const sortedLeaderboard = [...allPlayers].sort((a, b) => (b.score || 0) - (a.score || 0));
 
     return (
@@ -529,7 +491,6 @@ function BreakoutRoom({
           <Crown className="text-yellow-500" /> Leaderboard
         </h2>
         
-        {/* LEADERBOARD UI */}
         <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-2 mb-8 shadow-2xl flex flex-col gap-2">
           {sortedLeaderboard.map((p, index) => (
             <div key={p.id} className="flex items-center justify-between p-4 bg-zinc-950 rounded-xl border border-zinc-800/50">
@@ -544,23 +505,14 @@ function BreakoutRoom({
           ))}
         </div>
 
-        {/* HOST vs PLAYER MENUS */}
         {isHost ? (
           <div className="flex flex-col items-center">
             <p className="text-zinc-400 mb-6 text-center text-sm">Wait for everyone to lock in their guesses,<br/>then start the next round or end the game.</p>
             <div className="flex gap-4">
-              <button 
-                onClick={handleEndRoom}
-                disabled={isProcessing}
-                className="px-6 py-3 bg-zinc-800 text-white font-bold rounded-lg hover:bg-zinc-700 transition-colors border border-zinc-700 disabled:opacity-50"
-              >
+              <button onClick={handleEndRoom} disabled={isProcessing} className="px-6 py-3 bg-zinc-800 text-white font-bold rounded-lg hover:bg-zinc-700 transition-colors border border-zinc-700 disabled:opacity-50">
                 End Game
               </button>
-              <button 
-                onClick={handleNextRound}
-                disabled={isProcessing}
-                className="px-6 py-3 bg-white text-zinc-950 font-bold rounded-lg hover:bg-zinc-200 transition-colors disabled:opacity-50"
-              >
+              <button onClick={handleNextRound} disabled={isProcessing} className="px-6 py-3 bg-white text-zinc-950 font-bold rounded-lg hover:bg-zinc-200 transition-colors disabled:opacity-50">
                 Start Round {roomRound + 1}
               </button>
             </div>
@@ -572,94 +524,112 @@ function BreakoutRoom({
     );
   }
 
+  // --- 2. RENDER REVEAL SCREEN ---
+  if (phase === "REVEAL") {
+    const isPerfect = pointsEarned === requiredGuesses;
+    const actualNames = otherPlayers.map(p => p.name).join(" & ");
+
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-zinc-950 text-white text-center">
+        <div className="w-full max-w-lg bg-zinc-900 border border-zinc-800 p-10 rounded-3xl shadow-2xl flex flex-col items-center animate-in zoom-in-95 duration-300">
+          
+          {isPerfect ? (
+            <>
+              <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mb-6 text-emerald-400">
+                <PartyPopper size={40} />
+              </div>
+              <h2 className="text-4xl font-bold text-emerald-400 mb-2">Perfect Deduction!</h2>
+              <p className="text-zinc-400 text-lg mb-8">You saw right through their disguise.</p>
+            </>
+          ) : (
+            <>
+              <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mb-6 text-red-500">
+                <Ghost size={40} />
+              </div>
+              <h2 className="text-4xl font-bold text-red-500 mb-2">Fooled!</h2>
+              <p className="text-zinc-400 text-lg mb-8">They slipped right past you.</p>
+            </>
+          )}
+
+          <div className="bg-zinc-950 border border-zinc-800 w-full p-6 rounded-xl mb-8">
+            <p className="text-sm text-zinc-500 uppercase tracking-widest font-bold mb-2">Target Identity Revealed:</p>
+            <p className="text-2xl font-bold text-white">{actualNames}</p>
+          </div>
+
+          <p className="text-xl font-bold mb-8">
+            Earned: <span className={pointsEarned > 0 ? "text-emerald-400" : "text-zinc-500"}>+{pointsEarned} Points</span>
+          </p>
+
+          <button 
+            onClick={() => setPhase("WAITING")}
+            className="w-full py-4 bg-white text-zinc-950 font-bold rounded-xl hover:bg-zinc-200 transition-colors"
+          >
+            Continue to Lobby
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  // --- 3. RENDER GUESSING ---
   if (phase === "GUESSING") {
-    const guessablePlayers = allPlayers.filter((p) => p.id !== localPlayerId);
+    const guessablePlayers = allPlayers.filter(p => p.id !== localPlayerId);
 
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-zinc-950 text-white">
-        <h2 className="text-4xl font-bold mb-2 text-white">
-          Who were you talking to?
-        </h2>
-        <p className="text-zinc-400 mb-8">
-          Select <span className="font-bold text-white">{requiredGuesses}</span>{" "}
-          player{requiredGuesses > 1 ? "s" : ""} from the list below.
-        </p>
-
+        <h2 className="text-4xl font-bold mb-2 text-white">Who were you talking to?</h2>
+        <p className="text-zinc-400 mb-8">Select <span className="font-bold text-white">{requiredGuesses}</span> player{requiredGuesses > 1 ? "s" : ""} from the list below.</p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 w-full max-w-2xl mb-8">
-          {guessablePlayers.map((p) => {
+          {guessablePlayers.map(p => {
             const isSelected = selectedGuesses.includes(p.id);
             return (
               <button
                 key={p.id}
                 onClick={() => toggleGuess(p.id)}
-                className={`p-4 rounded-xl font-bold transition-all border-2 ${
-                  isSelected
-                    ? "bg-zinc-100 text-zinc-950 border-zinc-100 scale-105"
-                    : "bg-zinc-900 text-white border-zinc-700 hover:border-zinc-500"
-                }`}
+                className={`p-4 rounded-xl font-bold transition-all border-2 ${isSelected ? "bg-zinc-100 text-zinc-950 border-zinc-100 scale-105" : "bg-zinc-900 text-white border-zinc-700 hover:border-zinc-500"}`}
               >
                 {p.name}
               </button>
             );
           })}
         </div>
-
-        <button
-          onClick={submitGuess}
-          disabled={selectedGuesses.length !== requiredGuesses}
-          className="bg-red-500 text-white px-8 py-4 font-bold rounded-xl hover:bg-red-600 disabled:opacity-50 transition-colors"
-        >
+        <button onClick={submitGuess} disabled={selectedGuesses.length !== requiredGuesses} className="bg-red-500 text-white px-8 py-4 font-bold rounded-xl hover:bg-red-600 disabled:opacity-50 transition-colors">
           Lock in Guess
         </button>
       </main>
     );
   }
 
+  // --- 4. RENDER CHATTING ---
   return (
+    // ... (Your exact chatting UI return block here)
     <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-zinc-950 text-white">
       <div className="flex justify-between w-full max-w-2xl mb-4 items-end">
         <div>
-          <h1 className="text-3xl font-bold text-red-500 animate-pulse">
-            Secret Chat
-          </h1>
-          <p className="text-zinc-400">
-            Chatting with {otherPlayers.length} stranger
-            {otherPlayers.length > 1 ? "s" : ""}
-          </p>
+          <h1 className="text-3xl font-bold text-red-500 animate-pulse">Secret Chat</h1>
+          <p className="text-zinc-400">Chatting with {otherPlayers.length} stranger{otherPlayers.length > 1 ? "s" : ""}</p>
         </div>
-        <div
-          className={`text-4xl font-mono font-bold ${timeLeft <= 10 ? "text-red-500" : "text-white"}`}
-        >
-          00:{timeLeft.toString().padStart(2, "0")}
+        <div className={`text-4xl font-mono font-bold ${timeLeft <= 10 ? "text-red-500" : "text-white"}`}>
+          00:{timeLeft.toString().padStart(2, '0')}
         </div>
       </div>
-
+      
       <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 h-[500px] rounded-2xl flex flex-col p-4 shadow-2xl">
         <div className="flex-1 border-b border-zinc-800 mb-4 overflow-y-auto p-2 flex flex-col gap-4">
           {messages.length === 0 ? (
-            <p className="text-zinc-500 text-center text-sm mt-4">
-              Breakout room created. Start typing!
-            </p>
+            <p className="text-zinc-500 text-center text-sm mt-4">Breakout room created. Start typing!</p>
           ) : (
             messages.map((msg) => {
               const isMe = msg.sender_id === localPlayerId;
               const strangerInfo = strangerMap[msg.sender_id];
-
               return (
-                <div
-                  key={msg.id}
-                  className={`flex flex-col gap-1 ${isMe ? "items-end" : "items-start"}`}
-                >
+                <div key={msg.id} className={`flex flex-col gap-1 ${isMe ? "items-end" : "items-start"}`}>
                   {!isMe && strangerInfo && (
-                    <span
-                      className={`text-xs font-bold px-1 tracking-wider uppercase ${strangerInfo.color}`}
-                    >
+                    <span className={`text-xs font-bold px-1 tracking-wider uppercase ${strangerInfo.color}`}>
                       {strangerInfo.name}
                     </span>
                   )}
-                  <div
-                    className={`px-4 py-3 max-w-[80%] shadow-md ${isMe ? "bg-zinc-100 text-zinc-950 rounded-2xl rounded-br-sm font-medium" : "bg-zinc-800 text-white border border-zinc-700 rounded-2xl rounded-bl-sm"}`}
-                  >
+                  <div className={`px-4 py-3 max-w-[80%] shadow-md ${isMe ? "bg-zinc-100 text-zinc-950 rounded-2xl rounded-br-sm font-medium" : "bg-zinc-800 text-white border border-zinc-700 rounded-2xl rounded-bl-sm"}`}>
                     {msg.content}
                   </div>
                 </div>
@@ -667,21 +637,17 @@ function BreakoutRoom({
             })
           )}
         </div>
-
+        
         <form onSubmit={handleSendMessage} className="flex gap-2">
-          <input
-            type="text"
+          <input 
+            type="text" 
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Send an anonymous message..."
+            placeholder="Send an anonymous message..." 
             className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-3 focus:outline-none focus:border-zinc-400 transition-colors"
             autoComplete="off"
           />
-          <button
-            type="submit"
-            disabled={!newMessage.trim()}
-            className="bg-white text-zinc-950 px-6 font-bold rounded-lg hover:bg-zinc-200 disabled:opacity-50 transition-colors"
-          >
+          <button type="submit" disabled={!newMessage.trim()} className="bg-white text-zinc-950 px-6 font-bold rounded-lg hover:bg-zinc-200 disabled:opacity-50 transition-colors">
             Send
           </button>
         </form>
