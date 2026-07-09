@@ -12,6 +12,7 @@
     "@supabase/supabase-js": "^2.110.1",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
+    "canvas-confetti": "^1.9.4",
     "lucide-react": "^1.23.0",
     "nanoid": "^5.1.16",
     "next": "16.2.10",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
