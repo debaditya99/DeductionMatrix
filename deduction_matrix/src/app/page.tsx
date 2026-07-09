@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Crown, Loader2, ArrowLeft } from "lucide-react";
+// Add BookOpen and X to your lucide-react import
+import { Users, Crown, Loader2, ArrowLeft, BookOpen, X } from "lucide-react"; 
 import { nanoid } from "nanoid";
-import { supabase } from "@/lib/supabase";import { useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 
 export default function Home() {
   const router = useRouter();
@@ -17,6 +18,7 @@ export default function Home() {
   const [isJoining, setIsJoining] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [showRules, setShowRules] = useState(false);
 
   useEffect(() => {
     const savedName = localStorage.getItem("playerName");
@@ -112,6 +114,14 @@ export default function Home() {
       <h1 className="text-5xl font-bold tracking-tight mb-12 text-center drop-shadow-md">
         Deduction Matrix
       </h1>
+      {/* --- HOW TO PLAY BUTTON --- */}
+      <button 
+        onClick={() => setShowRules(true)}
+        className="absolute top-6 right-6 flex items-center gap-2 text-zinc-400 hover:text-white transition-colors bg-zinc-900/50 px-4 py-2 rounded-full border border-zinc-800"
+      >
+        <BookOpen size={18} />
+        <span className="text-sm font-bold">How to Play</span>
+      </button>
 
       <div className="w-full max-w-sm bg-zinc-900 p-8 rounded-2xl border border-zinc-800 shadow-2xl">
         {!isSubmitted ? (
@@ -207,6 +217,59 @@ export default function Home() {
           Created by Deb ✨
         </a>
       </div>
+      {/* --- RULES MODAL --- */}
+      {showRules && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-700 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-6 border-b border-zinc-800 bg-zinc-950/50">
+              <h2 className="text-2xl font-bold flex items-center gap-2">
+                <BookOpen className="text-red-500" /> Rules of Engagement
+              </h2>
+              <button 
+                onClick={() => setShowRules(false)}
+                className="text-zinc-500 hover:text-white transition-colors bg-zinc-800 hover:bg-zinc-700 p-1 rounded-md"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 flex flex-col gap-6 text-zinc-300">
+              <div>
+                <h3 className="text-white font-bold text-lg mb-1">1. The Setup</h3>
+                <p className="text-sm leading-relaxed">The Host creates a room. Players join using the 7-character code. The Host starts the game once everyone is in.</p>
+              </div>
+              
+              <div>
+                <h3 className="text-white font-bold text-lg mb-1">2. Secret Chat</h3>
+                <p className="text-sm leading-relaxed">Every round, you are secretly paired with 1 or 2 other players in a breakout room. You have <strong className="text-red-400">30 seconds</strong> to chat anonymously. Ask questions, bluff, or act suspicious.</p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-lg mb-1">3. The Guess</h3>
+                <p className="text-sm leading-relaxed">When the timer runs out, the chat locks. You must guess exactly who you were talking to from the list of players.</p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-lg mb-1">4. Scoring</h3>
+                <p className="text-sm leading-relaxed">Earn <strong className="text-green-400">+1 Point</strong> for every correct guess. The player with the most points at the end of the game wins!</p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-zinc-800 bg-zinc-950/50">
+              <button 
+                onClick={() => setShowRules(false)}
+                className="w-full py-3 bg-white text-zinc-950 font-bold rounded-xl hover:bg-zinc-200 transition-colors"
+              >
+                Understood
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
