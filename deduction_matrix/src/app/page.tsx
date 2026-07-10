@@ -162,14 +162,6 @@ export default function Home() {
       <h1 className="text-4xl md:text-5xl font-serif tracking-[0.3em] uppercase mb-12 text-center text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">
         Deduction Matrix
       </h1>
-      {/* --- HOW TO PLAY BUTTON --- */}
-      <button 
-        onClick={() => setShowRules(true)}
-        className="absolute top-6 right-6 flex items-center gap-2 text-zinc-400 hover:text-white transition-colors bg-zinc-900/50 px-4 py-2 rounded-full border border-zinc-800"
-      >
-        <BookOpen size={18} />
-        <span className="text-sm font-bold">How to Play</span>
-      </button>
 
       {/* --- TOP LEFT BUTTONS: REPORT & CONTRIBUTE --- */}
       <div className="absolute top-6 left-6 flex items-center gap-3">
