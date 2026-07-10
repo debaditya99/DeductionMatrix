@@ -2,8 +2,18 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-// Add BookOpen and X to your lucide-react import
-import { Users, Crown, Loader2, ArrowLeft, BookOpen, X } from "lucide-react"; 
+import {
+  Users,
+  Crown,
+  Loader2,
+  ArrowLeft,
+  BookOpen,
+  X,
+  Bug,
+  Globe,
+  Trash2,
+} from "lucide-react";
+
 import { nanoid } from "nanoid";
 import { supabase } from "@/lib/supabase";
 
@@ -12,13 +22,18 @@ export default function Home() {
   const [name, setName] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  
-  
+
   // New state for the Join flow
   const [isJoining, setIsJoining] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [showRules, setShowRules] = useState(false);
+
+  // Bug Report States
+  const [showBugModal, setShowBugModal] = useState(false);
+  const [bugText, setBugText] = useState("");
+  const [isSubmittingBug, setIsSubmittingBug] = useState(false);
+  const [bugSubmitted, setBugSubmitted] = useState(false);
 
   useEffect(() => {
     const savedName = localStorage.getItem("playerName");
@@ -31,6 +46,18 @@ export default function Home() {
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim().length > 0) setIsSubmitted(true);
+  };
+
+  const handleClearCache = () => {
+    if (
+      window.confirm(
+        "Abort mission? This will clear your alias and reset your local session.",
+      )
+    ) {
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.reload();
+    }
   };
 
   const handleHostGame = async () => {
@@ -79,13 +106,13 @@ export default function Home() {
       .single();
 
     if (roomError || !room) {
-      setErrorMsg("Room not found. Check the code.");
+      setErrorMsg("Invalid clearance code.");
       setIsLoading(false);
       return;
     }
 
     if (room.status !== "LOBBY") {
-      setErrorMsg("This game has already started!");
+      setErrorMsg("Operation already in progress.");
       setIsLoading(false);
       return;
     }
@@ -98,7 +125,7 @@ export default function Home() {
       .single();
 
     if (playerError) {
-      setErrorMsg("Failed to join room.");
+      setErrorMsg("Infiltration failed.");
       setIsLoading(false);
       return;
     }
@@ -109,9 +136,30 @@ export default function Home() {
     router.push(`/room/${code}`);
   };
 
+  const handleBugSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bugText.trim()) return;
+
+    setIsSubmittingBug(true);
+    await supabase
+      .from("bug_reports")
+      .insert([{ description: bugText.trim() }]);
+
+    setIsSubmittingBug(false);
+    setBugSubmitted(true);
+
+    // Auto-close after a success message
+    setTimeout(() => {
+      setShowBugModal(false);
+      setBugText("");
+      setBugSubmitted(false);
+    }, 2000);
+  };
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-zinc-950 text-white">
-      <h1 className="text-5xl font-bold tracking-tight mb-12 text-center drop-shadow-md">
+    <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-zinc-950 text-white relative">
+      {/* 007-STYLE HEADER */}
+      <h1 className="text-4xl md:text-5xl font-serif tracking-[0.3em] uppercase mb-12 text-center text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">
         Deduction Matrix
       </h1>
       {/* --- HOW TO PLAY BUTTON --- */}
@@ -123,149 +171,308 @@ export default function Home() {
         <span className="text-sm font-bold">How to Play</span>
       </button>
 
-      <div className="w-full max-w-sm bg-zinc-900 p-8 rounded-2xl border border-zinc-800 shadow-2xl">
+      {/* --- TOP LEFT BUTTONS: REPORT & CONTRIBUTE --- */}
+      <div className="absolute top-6 left-6 flex items-center gap-3">
+        <button
+          onClick={() => setShowBugModal(true)}
+          className="flex items-center gap-2 text-zinc-500 hover:text-red-500 transition-colors bg-zinc-950 px-4 py-2 rounded-sm border border-zinc-800 hover:border-red-900 uppercase tracking-widest text-xs font-bold"
+        >
+          <Bug size={14} />
+          <span className="hidden sm:inline">Report</span>
+        </button>
+        <a
+          href="https://github.com/debaditya99/DeductionMatrix"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors bg-zinc-950 px-4 py-2 rounded-sm border border-zinc-800 hover:border-zinc-500 uppercase tracking-widest text-xs font-bold"
+        >
+          <Globe size={14} />
+          <span className="hidden sm:inline">Intel</span>
+        </a>
+      </div>
+
+      {/* --- HOW TO PLAY BUTTON --- */}
+      <button
+        onClick={() => setShowRules(true)}
+        className="absolute top-6 right-6 flex items-center gap-2 text-zinc-500 hover:text-white transition-colors bg-zinc-950 px-4 py-2 rounded-sm border border-zinc-800 hover:border-zinc-500 uppercase tracking-widest text-xs font-bold"
+      >
+        <BookOpen size={14} />
+        <span className="hidden sm:inline">Briefing</span>
+      </button>
+
+      {/* MAIN DOSSIER CARD */}
+      <div className="w-full max-w-sm bg-zinc-950 p-8 border border-zinc-800 shadow-2xl relative overflow-hidden">
+        {/* Decorative corner accents */}
+        <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-zinc-500"></div>
+        <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-zinc-500"></div>
+        <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-zinc-500"></div>
+        <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-zinc-500"></div>
+
         {!isSubmitted ? (
-          <form onSubmit={handleNameSubmit} className="flex flex-col gap-4">
-            <label htmlFor="playerName" className="text-sm font-medium text-zinc-400">
-              Enter your alias
-            </label>
-            <input
-              id="playerName"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="px-4 py-3 rounded-lg bg-zinc-950 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-400 transition-colors"
-              placeholder="e.g. Detective Pika..."
-              required
-              maxLength={20}
-              autoComplete="off"
-            />
+          <form onSubmit={handleNameSubmit} className="flex flex-col gap-6">
+            <div>
+              <label
+                htmlFor="playerName"
+                className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-2 block"
+              >
+                Identify Yourself
+              </label>
+              <input
+                id="playerName"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-4 py-3 bg-zinc-900 border-b-2 border-zinc-700 text-white placeholder-zinc-700 focus:outline-none focus:border-white transition-colors font-mono uppercase tracking-wider"
+                placeholder="Enter Alias..."
+                required
+                maxLength={20}
+                autoComplete="off"
+              />
+            </div>
             <button
               type="submit"
-              className="mt-2 px-4 py-3 bg-white text-zinc-950 font-bold rounded-lg hover:bg-zinc-200 transition-colors"
+              className="w-full py-4 bg-white text-zinc-950 font-bold uppercase tracking-widest text-sm hover:bg-zinc-300 transition-colors"
             >
-              Enter Matrix
+              Initialize
             </button>
           </form>
         ) : isJoining ? (
-          <form onSubmit={handleJoinSubmit} className="flex flex-col gap-4">
-            <div className="flex items-center gap-2 mb-2">
-              <button 
-                type="button" 
-                onClick={() => { setIsJoining(false); setErrorMsg(""); }}
-                className="text-zinc-400 hover:text-white transition-colors"
+          <form onSubmit={handleJoinSubmit} className="flex flex-col gap-6">
+            <div className="flex items-center gap-3 mb-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsJoining(false);
+                  setErrorMsg("");
+                }}
+                className="text-zinc-500 hover:text-white transition-colors"
               >
-                <ArrowLeft size={20} />
+                <ArrowLeft size={18} />
               </button>
-              <p className="text-sm font-medium text-zinc-400">Join a Room</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">
+                Infiltrate Lobby
+              </p>
             </div>
-            
+
             <input
               type="text"
               value={joinCode}
               onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              className="px-4 py-3 rounded-lg bg-zinc-950 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-400 transition-colors uppercase font-mono tracking-widest text-center"
+              className="w-full px-4 py-3 bg-zinc-900 border-b-2 border-zinc-700 text-white placeholder-zinc-700 focus:outline-none focus:border-emerald-500 transition-colors font-mono uppercase tracking-widest text-center text-lg"
               placeholder="7-CHAR-CODE"
               required
               maxLength={7}
               autoComplete="off"
             />
-            
-            {errorMsg && <p className="text-red-400 text-sm text-center font-medium">{errorMsg}</p>}
+
+            {errorMsg && (
+              <p className="text-red-500 text-xs tracking-widest uppercase text-center font-bold">
+                {errorMsg}
+              </p>
+            )}
 
             <button
               type="submit"
               disabled={isLoading || joinCode.length !== 7}
-              className="mt-2 flex items-center justify-center gap-2 px-4 py-3 bg-zinc-100 text-zinc-950 font-bold rounded-lg hover:bg-zinc-300 transition-colors disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-3 py-4 bg-emerald-900 text-emerald-400 font-bold uppercase tracking-widest text-sm border border-emerald-700 hover:bg-emerald-800 transition-colors disabled:opacity-50"
             >
-              {isLoading && <Loader2 className="animate-spin" size={18} />}
-              {isLoading ? "Joining..." : "Join"}
+              {isLoading && <Loader2 className="animate-spin" size={16} />}
+              {isLoading ? "Breaching..." : "Access"}
             </button>
           </form>
         ) : (
-          <div className="flex flex-col gap-4">
-            <p className="text-center text-zinc-400 mb-2">
-              Welcome, <span className="text-white font-bold">{name}</span>
-            </p>
+          <div className="flex flex-col gap-6">
+            <div className="text-center mb-2">
+              <p className="text-xs uppercase tracking-widest text-zinc-500 mb-1">
+                Operative Confirmed
+              </p>
+              <p className="text-white font-mono uppercase tracking-widest">
+                {name}
+              </p>
+            </div>
             <button
-              className="flex items-center justify-center gap-3 px-4 py-4 bg-zinc-100 text-zinc-950 font-bold rounded-xl hover:bg-zinc-300 transition-colors disabled:opacity-50"
+              className="flex items-center justify-center gap-3 w-full py-4 bg-amber-500 text-zinc-950 font-bold uppercase tracking-widest text-sm hover:bg-amber-400 transition-colors disabled:opacity-50"
               onClick={handleHostGame}
               disabled={isLoading}
             >
-              {isLoading ? <Loader2 className="animate-spin" size={20} /> : <Crown size={20} />}
-              {isLoading ? "Creating Room..." : "Host a Game"}
+              {isLoading ? (
+                <Loader2 className="animate-spin" size={18} />
+              ) : (
+                <Crown size={18} />
+              )}
+              {isLoading ? "Generating..." : "Host Operation"}
             </button>
             <button
-              className="flex items-center justify-center gap-3 px-4 py-4 bg-zinc-800 text-white font-bold rounded-xl hover:bg-zinc-700 transition-colors border border-zinc-700 disabled:opacity-50"
+              className="flex items-center justify-center gap-3 w-full py-4 bg-zinc-950 text-emerald-500 font-bold uppercase tracking-widest text-sm border border-emerald-900 hover:border-emerald-500 hover:bg-emerald-950/30 transition-colors disabled:opacity-50"
               onClick={() => setIsJoining(true)}
               disabled={isLoading}
             >
-              <Users size={20} />
-              Join a Game
+              <Users size={18} />
+              Join Operation
             </button>
           </div>
         )}
       </div>
-      {/* --- CUTE CUSTOM FOOTER --- */}
+
       <div className="absolute bottom-8 flex flex-col items-center gap-1">
         <a
           href="https://github.com/debaditya99/DeductionMatrix"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[#DEBAD7] text-sm font-medium hover:opacity-80 transition-opacity flex items-center gap-1.5"
+          className="text-[#DEBAD7] text-xs uppercase tracking-widest font-medium hover:text-zinc-400 transition-colors"
         >
-          Created by Deb ✨
+          Developed by Deb♟️
         </a>
       </div>
-      {/* --- RULES MODAL --- */}
+
+      <div className="absolute bottom-6 right-6">
+        <button
+          onClick={handleClearCache}
+          title="Abort Mission"
+          className="flex items-center gap-2 text-zinc-700 hover:text-red-500 transition-colors bg-zinc-950 px-4 py-2 border border-zinc-900 hover:border-red-900 uppercase tracking-widest text-xs font-bold"
+        >
+          <Trash2 size={14} />
+          <span className="hidden sm:inline">Abort</span>
+        </button>
+      </div>
+
+      {/* --- CLASSIFIED RULES MODAL --- */}
       {showRules && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-700 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-            
-            {/* Modal Header */}
-            <div className="flex justify-between items-center p-6 border-b border-zinc-800 bg-zinc-950/50">
-              <h2 className="text-2xl font-bold flex items-center gap-2">
-                <BookOpen className="text-red-500" /> Rules of Engagement
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-zinc-950 border border-zinc-700 w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center p-6 border-b border-zinc-800 bg-zinc-900/50">
+              <h2 className="text-xl font-serif tracking-widest uppercase text-white flex items-center gap-3">
+                <BookOpen className="text-red-500" size={20} /> Mission Briefing
               </h2>
-              <button 
+              <button
                 onClick={() => setShowRules(false)}
-                className="text-zinc-500 hover:text-white transition-colors bg-zinc-800 hover:bg-zinc-700 p-1 rounded-md"
+                className="text-zinc-500 hover:text-white transition-colors"
               >
                 <X size={24} />
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-6 flex flex-col gap-6 text-zinc-300">
+            <div className="p-6 flex flex-col gap-6 text-zinc-300 font-mono text-sm">
               <div>
-                <h3 className="text-white font-bold text-lg mb-1">1. The Setup</h3>
-                <p className="text-sm leading-relaxed">The Host creates a room. Players join using the 7-character code. The Host starts the game once everyone is in.</p>
-              </div>
-              
-              <div>
-                <h3 className="text-white font-bold text-lg mb-1">2. Secret Chat</h3>
-                <p className="text-sm leading-relaxed">Every round, you are secretly paired with 1 or 2 other players in a breakout room. You have <strong className="text-red-400">30 seconds</strong> to chat anonymously. Ask questions, bluff, or act suspicious.</p>
-              </div>
-
-              <div>
-                <h3 className="text-white font-bold text-lg mb-1">3. The Guess</h3>
-                <p className="text-sm leading-relaxed">When the timer runs out, the chat locks. You must guess exactly who you were talking to from the list of players.</p>
+                <h3 className="text-white uppercase tracking-widest font-bold mb-2 flex items-center gap-2">
+                  <span className="text-amber-500">01.</span> The Infiltration
+                </h3>
+                <p className="leading-relaxed text-zinc-400">
+                  You will be dropped into an encrypted, anonymous chat room
+                  with unknown operatives. You have exactly{" "}
+                  <strong className="text-white">30 seconds</strong> to gather
+                  intel.
+                </p>
               </div>
 
               <div>
-                <h3 className="text-white font-bold text-lg mb-1">4. Scoring</h3>
-                <p className="text-sm leading-relaxed">Earn <strong className="text-green-400">+1 Point</strong> for every correct guess. The player with the most points at the end of the game wins!</p>
+                <h3 className="text-white uppercase tracking-widest font-bold mb-2 flex items-center gap-2">
+                  <span className="text-blue-500">02.</span> The Deceit
+                </h3>
+                <p className="leading-relaxed text-zinc-400">
+                  Trust no one. Mask your digital footprint, lie, and deflect
+                  suspicion. You earn{" "}
+                  <strong className="text-blue-400">Deception Points</strong>{" "}
+                  for every operative you successfully fool.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white uppercase tracking-widest font-bold mb-2 flex items-center gap-2">
+                  <span className="text-emerald-500">03.</span> The Deduction
+                </h3>
+                <p className="leading-relaxed text-zinc-400">
+                  Read between the lines. When the timer hits zero, you must
+                  lock in your targets. You earn{" "}
+                  <strong className="text-emerald-400">Deduction Points</strong>{" "}
+                  for every alias you correctly identify.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white uppercase tracking-widest font-bold mb-2 flex items-center gap-2">
+                  <span className="text-red-500">04.</span> The Objective
+                </h3>
+                <p className="leading-relaxed text-zinc-400">
+                  Succeeding on both fronts makes you a{" "}
+                  <strong className="text-purple-400">Double Agent</strong>.
+                  Accumulate the most points across all rounds to win.
+                </p>
               </div>
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-6 border-t border-zinc-800 bg-zinc-950/50">
-              <button 
+            <div className="p-6 border-t border-zinc-800 bg-zinc-900/50">
+              <button
                 onClick={() => setShowRules(false)}
-                className="w-full py-3 bg-white text-zinc-950 font-bold rounded-xl hover:bg-zinc-200 transition-colors"
+                className="w-full py-4 bg-white text-zinc-950 font-bold uppercase tracking-widest text-sm hover:bg-zinc-300 transition-colors"
               >
-                Understood
+                Understood, Agent
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- BUG REPORT MODAL --- */}
+      {showBugModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-zinc-950 border border-zinc-700 w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center p-6 border-b border-zinc-800 bg-zinc-900/50">
+              <h2 className="text-xl font-serif tracking-widest uppercase text-white flex items-center gap-3">
+                <Bug className="text-red-500" size={20} /> Report Intel
+              </h2>
+              <button
+                onClick={() => {
+                  setShowBugModal(false);
+                  setBugSubmitted(false);
+                }}
+                className="text-zinc-500 hover:text-white transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {bugSubmitted ? (
+                <div className="flex flex-col items-center justify-center py-8 text-emerald-500 gap-3">
+                  <div className="w-16 h-16 border border-emerald-900 bg-emerald-950/30 flex items-center justify-center">
+                    <Bug size={32} />
+                  </div>
+                  <p className="font-bold uppercase tracking-widest text-sm mt-4">
+                    Intel Secured
+                  </p>
+                  <p className="text-zinc-500 text-xs font-mono uppercase">
+                    The matrix is being patched.
+                  </p>
+                </div>
+              ) : (
+                <form
+                  onSubmit={handleBugSubmit}
+                  className="flex flex-col gap-4"
+                >
+                  <p className="text-xs font-mono uppercase text-zinc-500 mb-2">
+                    Encountered a system anomaly? File a report.
+                  </p>
+                  <textarea
+                    value={bugText}
+                    onChange={(e) => setBugText(e.target.value)}
+                    placeholder="Describe the anomaly..."
+                    className="w-full bg-zinc-900 border border-zinc-700 p-4 focus:outline-none focus:border-red-500 transition-colors resize-none h-32 font-mono text-sm text-white placeholder-zinc-600"
+                    required
+                  />
+                  <button
+                    type="submit"
+                    disabled={isSubmittingBug || !bugText.trim()}
+                    className="w-full py-4 bg-red-900 text-red-100 font-bold uppercase tracking-widest text-sm border border-red-700 hover:bg-red-800 transition-colors disabled:opacity-50 flex justify-center items-center gap-3"
+                  >
+                    {isSubmittingBug ? (
+                      <Loader2 className="animate-spin" size={16} />
+                    ) : (
+                      "Transmit"
+                    )}
+                  </button>
+                </form>
+              )}
             </div>
           </div>
         </div>
