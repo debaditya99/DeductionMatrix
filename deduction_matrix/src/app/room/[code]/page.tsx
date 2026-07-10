@@ -495,24 +495,24 @@ export default function RoomLobby() {
   );
 }
 
-function BreakoutRoom({ 
-  roomCode, 
-  groupId, 
+function BreakoutRoom({
+  roomCode,
+  groupId,
   localPlayerId,
   groupPlayers,
   allPlayers,
   chatEndsAt,
   isHost,
-  roomRound
-}: { 
-  roomCode: string; 
-  groupId: string; 
-  localPlayerId: string; 
+  roomRound,
+}: {
+  roomCode: string;
+  groupId: string;
+  localPlayerId: string;
   groupPlayers: any[];
   allPlayers: any[];
   chatEndsAt: string;
-  isHost: boolean;   
-  roomRound: number; 
+  isHost: boolean;
+  roomRound: number;
 }) {
   // ==========================================
   // 1. ALL HOOKS MUST GO AT THE TOP
@@ -530,12 +530,15 @@ function BreakoutRoom({
 
   const otherPlayers = groupPlayers.filter((p) => p.id !== localPlayerId);
   const requiredGuesses = otherPlayers.length;
-  
+
   const strangerMap = Object.fromEntries(
     otherPlayers.map((p, index) => [
       p.id,
-      { name: `Stranger ${index + 1}`, color: index === 0 ? "text-blue-400" : "text-emerald-400" }
-    ])
+      {
+        name: `Stranger ${index + 1}`,
+        color: index === 0 ? "text-blue-400" : "text-emerald-400",
+      },
+    ]),
   );
 
   // Hook: Reset round state
@@ -571,17 +574,32 @@ function BreakoutRoom({
   useEffect(() => {
     if (phase !== "CHATTING") return;
     const fetchMessages = async () => {
-      const { data } = await supabase.from("messages").select("*").eq("group_id", groupId).order("created_at", { ascending: true });
+      const { data } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("group_id", groupId)
+        .order("created_at", { ascending: true });
       if (data) setMessages(data);
     };
     fetchMessages();
 
-    const channel = supabase.channel(`chat:${groupId}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `group_id=eq.${groupId}` }, 
-        (payload) => setMessages((prev) => [...prev, payload.new])
-      ).subscribe();
+    const channel = supabase
+      .channel(`chat:${groupId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `group_id=eq.${groupId}`,
+        },
+        (payload) => setMessages((prev) => [...prev, payload.new]),
+      )
+      .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [groupId, phase]);
 
   // Hook: Calculate Scores when everyone has guessed
@@ -686,9 +704,9 @@ function BreakoutRoom({
 
   const toggleGuess = (playerId: string) => {
     if (selectedGuesses.includes(playerId)) {
-      setSelectedGuesses(prev => prev.filter(id => id !== playerId));
+      setSelectedGuesses((prev) => prev.filter((id) => id !== playerId));
     } else if (selectedGuesses.length < requiredGuesses) {
-      setSelectedGuesses(prev => [...prev, playerId]);
+      setSelectedGuesses((prev) => [...prev, playerId]);
     }
   };
 
@@ -745,7 +763,7 @@ function BreakoutRoom({
   const handleEndRoom = async () => {
     setIsProcessing(true);
     await supabase.from("rooms").delete().eq("code", roomCode);
-    window.location.href = "/"; 
+    window.location.href = "/";
   };
 
   // ==========================================
@@ -949,7 +967,7 @@ function BreakoutRoom({
 
   // --- RENDER 4: GUESSING ---
   if (phase === "GUESSING") {
-    const guessablePlayers = allPlayers.filter(p => p.id !== localPlayerId);
+    const guessablePlayers = allPlayers.filter((p) => p.id !== localPlayerId);
 
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-zinc-950 text-white">
@@ -961,7 +979,7 @@ function BreakoutRoom({
           player{requiredGuesses > 1 ? "s" : ""} from the list below.
         </p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 w-full max-w-2xl mb-8">
-          {guessablePlayers.map(p => {
+          {guessablePlayers.map((p) => {
             const isSelected = selectedGuesses.includes(p.id);
             return (
               <button
@@ -987,34 +1005,49 @@ function BreakoutRoom({
 
   // --- RENDER 5: CHATTING (Default Fallback) ---
   return (
-    // ... (Your exact chatting UI return block here)
     <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-zinc-950 text-white">
       <div className="flex justify-between w-full max-w-2xl mb-4 items-end">
         <div>
-          <h1 className="text-3xl font-bold text-red-500 animate-pulse">Secret Chat</h1>
-          <p className="text-zinc-400">Chatting with {otherPlayers.length} stranger{otherPlayers.length > 1 ? "s" : ""}</p>
+          <h1 className="text-3xl font-bold text-red-500 animate-pulse">
+            Secret Chat
+          </h1>
+          <p className="text-zinc-400">
+            Chatting with {otherPlayers.length} stranger
+            {otherPlayers.length > 1 ? "s" : ""}
+          </p>
         </div>
-        <div className={`text-4xl font-mono font-bold ${timeLeft <= 10 ? "text-red-500" : "text-white"}`}>
-          00:{timeLeft.toString().padStart(2, '0')}
+        <div
+          className={`text-4xl font-mono font-bold ${timeLeft <= 10 ? "text-red-500" : "text-white"}`}
+        >
+          00:{timeLeft.toString().padStart(2, "0")}
         </div>
       </div>
-      
+
       <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 h-[500px] rounded-2xl flex flex-col p-4 shadow-2xl">
         <div className="flex-1 border-b border-zinc-800 mb-4 overflow-y-auto p-2 flex flex-col gap-4">
           {messages.length === 0 ? (
-            <p className="text-zinc-500 text-center text-sm mt-4">Breakout room created. Start typing!</p>
+            <p className="text-zinc-500 text-center text-sm mt-4">
+              Breakout room created. Start typing!
+            </p>
           ) : (
             messages.map((msg) => {
               const isMe = msg.sender_id === localPlayerId;
               const strangerInfo = strangerMap[msg.sender_id];
               return (
-                <div key={msg.id} className={`flex flex-col gap-1 ${isMe ? "items-end" : "items-start"}`}>
+                <div
+                  key={msg.id}
+                  className={`flex flex-col gap-1 ${isMe ? "items-end" : "items-start"}`}
+                >
                   {!isMe && strangerInfo && (
-                    <span className={`text-xs font-bold px-1 tracking-wider uppercase ${strangerInfo.color}`}>
+                    <span
+                      className={`text-xs font-bold px-1 tracking-wider uppercase ${strangerInfo.color}`}
+                    >
                       {strangerInfo.name}
                     </span>
                   )}
-                  <div className={`px-4 py-3 max-w-[80%] shadow-md ${isMe ? "bg-zinc-100 text-zinc-950 rounded-2xl rounded-br-sm font-medium" : "bg-zinc-800 text-white border border-zinc-700 rounded-2xl rounded-bl-sm"}`}>
+                  <div
+                    className={`px-4 py-3 max-w-[80%] shadow-md ${isMe ? "bg-zinc-100 text-zinc-950 rounded-2xl rounded-br-sm font-medium" : "bg-zinc-800 text-white border border-zinc-700 rounded-2xl rounded-bl-sm"}`}
+                  >
                     {msg.content}
                   </div>
                 </div>
@@ -1022,17 +1055,21 @@ function BreakoutRoom({
             })
           )}
         </div>
-        
+
         <form onSubmit={handleSendMessage} className="flex gap-2">
-          <input 
-            type="text" 
+          <input
+            type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Send an anonymous message..." 
+            placeholder="Send an anonymous message..."
             className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-3 focus:outline-none focus:border-zinc-400 transition-colors"
             autoComplete="off"
           />
-          <button type="submit" disabled={!newMessage.trim()} className="bg-white text-zinc-950 px-6 font-bold rounded-lg hover:bg-zinc-200 disabled:opacity-50 transition-colors">
+          <button
+            type="submit"
+            disabled={!newMessage.trim()}
+            className="bg-white text-zinc-950 px-6 font-bold rounded-lg hover:bg-zinc-200 disabled:opacity-50 transition-colors"
+          >
             Send
           </button>
         </form>
