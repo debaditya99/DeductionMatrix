@@ -67,29 +67,94 @@ export default function RoomLobby() {
   const [room, setRoom] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const storedId = localStorage.getItem("playerId");
-    if (!storedId) {
-      router.push("/");
-      return;
-    }
-    setLocalPlayerId(storedId);
+  // --- NEW: DIRECT LINK JOIN STATES ---
+  const [needsName, setNeedsName] = useState(false);
+  const [tempName, setTempName] = useState("");
+  const [joinError, setJoinError] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
 
-    const fetchInitialData = async () => {
-      // Fetch Room
-      const { data: roomData } = await supabase
+  // ==========================================
+  // EFFECT 1: DIRECT LINK AUTH & AUTO-JOIN
+  // ==========================================
+  useEffect(() => {
+    const initializeJoinFlow = async () => {
+      setIsLoading(true);
+      const storedName = localStorage.getItem("playerName");
+      const storedId = localStorage.getItem("playerId");
+
+      // 1. Verify the room exists
+      const { data: roomData, error: roomError } = await supabase
         .from("rooms")
         .select("*")
         .eq("code", roomCode)
         .single();
-      if (roomData) setRoom(roomData);
 
-      // Fetch Players & Auto-accept host
-      await supabase
-        .from("players")
-        .update({ status: "ACCEPTED" })
-        .eq("id", storedId)
-        .eq("is_host", true);
+      if (roomError || !roomData) {
+        window.location.href = "/"; // Room doesn't exist, kick to home
+        return;
+      }
+      setRoom(roomData);
+
+      // 2. If they have no alias, bounce them to the home page with a join ticket
+      if (!storedName) {
+        router.push(`/?join=${roomCode}`);
+        return;
+      }
+
+      // 3. Check if they already possess a valid ID for THIS specific room
+      let validPlayerId = null;
+      if (storedId) {
+        const { data: existingPlayer } = await supabase
+          .from("players")
+          .select("id")
+          .eq("id", storedId)
+          .eq("room_code", roomCode)
+          .single();
+
+        if (existingPlayer) validPlayerId = existingPlayer.id;
+      }
+
+      // 4. AUTO-JOIN: They have a name but aren't in this room yet
+      if (!validPlayerId) {
+        if (roomData.status !== "LOBBY") {
+          setJoinError("Operation already in progress.");
+          setNeedsName(true); // Show error on the join UI
+          setIsLoading(false);
+          return;
+        }
+
+        const { data: newPlayer, error: joinErr } = await supabase
+          .from("players")
+          .insert([{ room_code: roomCode, name: storedName, is_host: false }])
+          .select()
+          .single();
+
+        if (newPlayer && !joinErr) {
+          localStorage.setItem("playerId", newPlayer.id);
+          validPlayerId = newPlayer.id;
+        } else {
+          setJoinError("Infiltration failed.");
+          setNeedsName(true);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // 5. Success! Set the local ID to trigger the next useEffect
+      setLocalPlayerId(validPlayerId);
+    };
+
+    initializeJoinFlow();
+  }, [roomCode]);
+
+  // ==========================================
+  // EFFECT 2: DATA FETCHING & REAL-TIME
+  // ==========================================
+  useEffect(() => {
+    // Wait until we have officially established the player's identity
+    if (!localPlayerId) return;
+
+    const setupRoom = async () => {
       const { data: playersData } = await supabase
         .from("players")
         .select("*")
@@ -99,71 +164,67 @@ export default function RoomLobby() {
       setIsLoading(false);
     };
 
-    fetchInitialData();
+    setupRoom();
 
     // Subscribe to BOTH players and rooms
     const channel = supabase
       .channel(`room:${roomCode}`)
-      // 1. The INSERT Listener
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "players", filter: `room_code=eq.${roomCode}` },
-        (payload) => {
-          setPlayers((prev) => {
-            if (prev.some((p) => p.id === payload.new.id)) return prev;
-            return [...prev, payload.new as Player];
-          });
-        },
-      )
-      // 2. The UPDATE Listener
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "players",
-          // Note: If you have filter: `room_code=eq.${roomCode}` here,
-          // make sure Supabase isn't dropping the event!
-          // If it is, remove the filter line temporarily to test.
-        },
-        (payload) => {
-          setPlayers((prev) => prev.map((p) => p.id === payload.new.id ? ({ ...p, ...payload.new } as Player) : p));
-        },
-      )
-      // 3. The DELETE Listener (No filter, to bypass Supabase limitations)
-      .on(
-        "postgres_changes",
-        { event: "DELETE", schema: "public", table: "players" },
-        (payload) => {
-          setPlayers((prev) => prev.filter((p) => p.id !== payload.old.id));
-        },
-      )
-      // 2. The Rooms Listener (forces fresh data sync so you don't have to refresh)
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "rooms", filter: `code=eq.${roomCode}` },
-        async () => {
-          const { data } = await supabase.from("rooms").select("*").eq("code", roomCode).single();
-          if (data) setRoom(data);
-        },
-      )
-      // --- ADD THIS DELETE LISTENER ---
-      .on(
-        "postgres_changes",
-        {
-          event: "DELETE",
-          schema: "public",
-          table: "rooms",
-          filter: `code=eq.${roomCode}`,
-        },
-        () => {
-          window.location.href = "/"; // Instantly kicks everyone to the home page
-        },
-      )
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "players", filter: `room_code=eq.${roomCode}` }, (payload) => {
+        setPlayers((prev) => {
+          if (prev.some((p) => p.id === payload.new.id)) return prev;
+          return [...prev, payload.new as Player];
+        });
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "players" }, (payload) => {
+        setPlayers((prev) => prev.map((p) => p.id === payload.new.id ? ({ ...p, ...payload.new } as Player) : p));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "players" }, (payload) => {
+        setPlayers((prev) => prev.filter((p) => p.id !== payload.old.id));
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `code=eq.${roomCode}` }, async () => {
+        const { data } = await supabase.from("rooms").select("*").eq("code", roomCode).single();
+        if (data) setRoom(data);
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "rooms", filter: `code=eq.${roomCode}` }, () => { 
+        window.location.href = "/"; 
+      })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [roomCode, router]);
+  }, [roomCode, localPlayerId]);
+
+  // --- SUBMIT MISSING NAME (DIRECT LINK) ---
+  const handleDirectJoinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tempName.trim()) return;
+    
+    setIsJoining(true);
+    setJoinError("");
+
+    const { data: roomData } = await supabase.from("rooms").select("status").eq("code", roomCode).single();
+    
+    if (!roomData || roomData.status !== "LOBBY") {
+      setJoinError(roomData ? "Operation already in progress." : "Invalid clearance code.");
+      setIsJoining(false);
+      return;
+    }
+
+    const { data: newPlayer, error } = await supabase
+      .from("players")
+      .insert([{ room_code: roomCode, name: tempName.trim(), is_host: false }])
+      .select()
+      .single();
+
+    if (newPlayer && !error) {
+      localStorage.setItem("playerName", tempName.trim());
+      localStorage.setItem("playerId", newPlayer.id);
+      setNeedsName(false); // Hides the form
+      setLocalPlayerId(newPlayer.id); // Triggers Effect #2
+    } else {
+      setJoinError("Infiltration failed.");
+    }
+    setIsJoining(false);
+  };
 
   const handleStartGame = async () => {
     if (acceptedPlayers.length < 2) return;

@@ -41,11 +41,27 @@ export default function Home() {
       setName(savedName);
       setIsSubmitted(true);
     }
+
+    // --- NEW: INTERCEPT DIRECT LINKS ---
+    // Check if the URL has a ?join=CODE parameter
+    const params = new URLSearchParams(window.location.search);
+    const joinParam = params.get("join");
+    
+    if (joinParam) {
+      setJoinCode(joinParam.toUpperCase());
+      // If they ALREADY had a name but clicked a link, skip to the join screen
+      if (savedName) setIsJoining(true); 
+    }
   }, []);
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (name.trim().length > 0) setIsSubmitted(true);
+    if (name.trim().length > 0) {
+      setIsSubmitted(true);
+      // --- NEW: AUTO-ADVANCE ---
+      // If they arrived via a direct link, instantly move them to the breach screen
+      if (joinCode) setIsJoining(true);
+    }
   };
 
   const handleClearCache = () => {
@@ -76,7 +92,12 @@ export default function Home() {
 
     const { data: playerData, error: playerError } = await supabase
       .from("players")
-      .insert([{ room_code: roomCode, name: name, is_host: true }])
+      .insert([{ 
+        room_code: roomCode, 
+        name: name, 
+        is_host: true, 
+        status: "ACCEPTED" // 🚀 FIX: Instantly accept the host upon creation
+      }])
       .select()
       .single();
 
